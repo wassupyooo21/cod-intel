@@ -61,7 +61,7 @@
 <div class="container">
   <div id="serverWarn" class="server-warn" style="display:none">
     ⚠️ 無法連線到本機 server。請先在 Terminal 執行：<br>
-    <code>cd ~/Downloads && npm install && node server.js</code><br>
+    <code>cd ~/Desktop/files && node server.js</code><br>
     啟動後重新整理此頁面。
   </div>
   <div class="filter-bar">
@@ -82,7 +82,9 @@
 <footer>COD Intel — 資料來源：各媒體 RSS Feed　|　僅供個人參考使用</footer>
 
 <script>
-const API = 'http://localhost:3131/api/news';
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.startsWith('192.168.');
+const BASE = IS_LOCAL ? `http://${location.hostname}:3131` : 'https://cod-intel.onrender.com';
+const API = `${BASE}/api/news`;
 const COD_REGEX = /call of duty|warzone|cod\b|modern warfare|black ops|mw4|mw3|bo7|dmz|warzone mobile|activision|infinity ward|treyarch|sledgehammer|blackout|cold war|vanguard|ghost|makarov|operator|gulag|verdansk|rebirth|urzikstan|omnimovement/i;
 
 let allItems = [], allRawItems = [], activeSource = 'all', sourceList = [];
@@ -188,7 +190,7 @@ async function batchTranslate(items) {
   const prompt = `你是 Call of Duty 電玩新聞翻譯專家。將以下編號文字翻譯成繁體中文，保留 Warzone、loadout、operator、gulag、Verdansk 等專有名詞不翻譯。只回傳翻譯，格式每行 [編號] 翻譯內容：\n\n${numbered}`;
   try {
     const texts = toTranslate.map(t => t.text);
-    const res = await fetch('http://localhost:3131/api/translate', {
+    const res = await fetch(`${BASE}/api/translate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texts })
