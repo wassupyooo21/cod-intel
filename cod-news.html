@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COD Intel — 頭條聚合</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#0d0d0f;--surface:#16161a;--surface2:#1e1e24;--border:rgba(255,255,255,0.08);--border-hover:rgba(255,255,255,0.18);--text:#f0f0f2;--text-muted:#888899;--text-dim:#55556a;--accent:#e8c84a;--red:#e84a4a;--green:#4acd8d;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;min-height:100vh;}
+  header{border-bottom:1px solid var(--border);padding:0 2rem;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;background:rgba(13,13,15,0.94);backdrop-filter:blur(12px);z-index:100;}
+  .logo{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;letter-spacing:.05em;color:var(--accent);text-transform:uppercase;}
+  .logo span{color:var(--text-muted);font-weight:400;margin-left:4px;font-size:14px;letter-spacing:.1em;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);display:inline-block;margin-right:5px;animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .last-update{font-size:12px;color:var(--text-dim);}
+  .container{max-width:960px;margin:0 auto;padding:1.5rem;}
+  .filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center;}
+  .filter-label{font-size:11px;font-weight:700;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase;margin-right:4px;}
+  .src-btn{font-size:12px;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:4px 14px;border-radius:3px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;transition:all .15s;}
+  .src-btn:hover{border-color:var(--border-hover);color:var(--text);}
+  .src-btn.active{background:var(--accent);border-color:var(--accent);color:#000;}
+  .toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;}
+  .status-text{font-size:13px;color:var(--text-muted);}
+  .toolbar-right{display:flex;gap:8px;align-items:center;}
+  .toggle-label{font-size:12px;color:var(--text-muted);display:flex;align-items:center;gap:5px;cursor:pointer;}
+  .toggle-label input{cursor:pointer;accent-color:var(--accent);}
+  .refresh-btn{font-size:12px;font-family:'Barlow Condensed',sans-serif;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:5px 14px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;border-radius:3px;transition:all .15s;}
+  .refresh-btn:hover{border-color:var(--border-hover);color:var(--text);}
+  .debug-bar{font-size:11px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:8px 12px;margin-bottom:1rem;line-height:2;display:none;word-break:break-all;}
+  .debug-bar.show{display:block;}
+  .debug-ok{color:var(--green);}
+  .debug-err{color:var(--red);}
+  .feed{display:flex;flex-direction:column;gap:8px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,background .15s;text-decoration:none;display:block;}
+  .card:hover{border-color:var(--border-hover);background:var(--surface2);}
+  .card-inner{display:grid;grid-template-columns:1fr 130px;}
+  .card-body{padding:14px 16px;}
+  .card-top{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .src-tag{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:2px 8px;border-radius:2px;}
+  .card-time{font-size:11px;color:var(--text-dim);}
+  .card-title{font-size:15px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:6px;}
+  .card-summary{font-size:12px;color:var(--text-muted);line-height:1.6;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .card-img{width:130px;height:100%;min-height:95px;object-fit:cover;display:block;background:var(--surface2);border-left:1px solid var(--border);}
+  .card-img-ph{width:130px;min-height:95px;background:var(--surface2);border-left:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:22px;}
+  .server-warn{background:#1a1200;border:1px solid #3a2800;border-radius:6px;padding:1rem 1.25rem;margin-bottom:1rem;font-size:13px;line-height:1.7;color:#fbbf24;}
+  .server-warn code{background:#2a2000;padding:2px 6px;border-radius:3px;font-family:monospace;font-size:12px;}
+  .empty{text-align:center;padding:4rem 1rem;color:var(--text-dim);font-size:14px;}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--text-muted);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:5px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  footer{border-top:1px solid var(--border);text-align:center;padding:1.5rem;font-size:12px;color:var(--text-dim);margin-top:3rem;}
+  @media(max-width:600px){header{padding:0 1rem;}.container{padding:1rem;}.card-inner{grid-template-columns:1fr 90px;}.card-img,.card-img-ph{width:90px;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">COD Intel <span>// News</span></div>
+  <div class="last-update" id="lastUpdate"></div>
+</header>
+<div class="container">
+  <div id="serverWarn" class="server-warn" style="display:none">
+    ⚠️ 無法連線到本機 server。請先在 Terminal 執行：<br>
+    <code>cd ~/Downloads && npm install && node server.js</code><br>
+    啟動後重新整理此頁面。
+  </div>
+  <div class="filter-bar">
+    <span class="filter-label">來源</span>
+    <div id="sourceBar"></div>
+  </div>
+  <div class="toolbar">
+    <span class="status-text" id="status"><span class="spinner"></span>連線中...</span>
+    <div class="toolbar-right">
+      <label class="toggle-label"><input type="checkbox" id="filterToggle" checked> 只看 COD</label>
+      <button class="refresh-btn" id="translateBtn" onclick="toggleTranslate()">譯 中文</button>
+      <button class="refresh-btn" onclick="loadAll()">↺ 重新整理</button>
+    </div>
+  </div>
+  <div class="debug-bar" id="debugBar"></div>
+  <div class="feed" id="feed"></div>
+</div>
+<footer>COD Intel — 資料來源：各媒體 RSS Feed　|　僅供個人參考使用</footer>
+
+<script>
+const API = 'http://localhost:3131/api/news';
+const COD_REGEX = /call of duty|warzone|cod\b|modern warfare|black ops|mw4|mw3|bo7|dmz|warzone mobile|activision|infinity ward|treyarch|sledgehammer|blackout|cold war|vanguard|ghost|makarov|operator|gulag|verdansk|rebirth|urzikstan|omnimovement/i;
+
+let allItems = [], allRawItems = [], activeSource = 'all', sourceList = [];
+
+function timeAgo(d) {
+  const s = Math.floor((Date.now() - new Date(d)) / 1000);
+  if (isNaN(s) || s < 0) return '';
+  if (s < 60) return '剛剛';
+  if (s < 3600) return Math.floor(s / 60) + ' 分鐘前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小時前';
+  return Math.floor(s / 86400) + ' 天前';
+}
+
+async function loadAll() {
+  allItems = []; allRawItems = [];
+  document.getElementById('status').innerHTML = '<span class="spinner"></span>載入中...';
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('debugBar').className = 'debug-bar';
+  document.getElementById('serverWarn').style.display = 'none';
+
+  let results;
+  try {
+    const res = await fetch(API);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    results = await res.json();
+  } catch (e) {
+    document.getElementById('serverWarn').style.display = 'block';
+    document.getElementById('status').textContent = '無法連線到 server';
+    return;
+  }
+
+  // 動態建立 source bar
+  sourceList = [{ id: 'all', label: 'All' }, ...results.map(r => ({ id: r.id, label: r.label }))];
+  buildSourceBar();
+
+  const debugLines = results.map(r =>
+    r.error
+      ? `<span class="debug-err">✗ ${r.label}：${r.error}</span>`
+      : `<span class="debug-ok">✓ ${r.label}</span> ${r.matched ?? r.total} 篇`
+  ).join('　　');
+  document.getElementById('debugBar').innerHTML = debugLines;
+  document.getElementById('debugBar').className = 'debug-bar show';
+
+  results.forEach(r => {
+    const cod = r.items.filter(i => COD_REGEX.test(i.title + ' ' + i.summary));
+    allItems.push(...cod);
+    allRawItems.push(...r.items);
+  });
+
+  allItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+  allRawItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const now = new Date();
+  document.getElementById('lastUpdate').innerHTML =
+    `<span class="live-dot"></span>更新於 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  render();
+}
+
+function render() {
+  const filterOn = document.getElementById('filterToggle').checked;
+  const pool = filterOn ? allItems : allRawItems;
+  const items = activeSource === 'all' ? pool : pool.filter(i => i.source === activeSource);
+  document.getElementById('status').textContent = items.length + ' 則消息';
+
+  if (!items.length) {
+    document.getElementById('feed').innerHTML = `<div class="empty"><div style="font-size:36px;margin-bottom:12px">📭</div><div>沒有找到文章</div><div style="margin-top:6px;font-size:12px">試試關閉「只看 COD」篩選</div></div>`;
+    return;
+  }
+
+  document.getElementById('feed').innerHTML = items.map(renderCard).join('');
+}
+
+function buildSourceBar() {
+  document.getElementById('sourceBar').innerHTML = sourceList.map(s =>
+    `<button class="src-btn${s.id === 'all' ? ' active' : ''}" data-id="${s.id}" onclick="setSource('${s.id}')">${s.label}</button>`
+  ).join('');
+}
+
+function setSource(id) {
+  activeSource = id;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+  render();
+}
+
+document.getElementById('filterToggle').addEventListener('change', render);
+
+let translated = false;
+let translateCache = {};
+
+
+
+async function batchTranslate(items) {
+  const toTranslate = [];
+  items.forEach((item, i) => {
+    if (!item.titleZH) {
+      toTranslate.push({ idx: i, field: 'title', text: item.title });
+      toTranslate.push({ idx: i, field: 'summary', text: item.summary });
+    }
+  });
+  if (!toTranslate.length) return;
+  const numbered = toTranslate.map((t, i) => `[${i+1}] ${t.text}`).join('\n');
+  const prompt = `你是 Call of Duty 電玩新聞翻譯專家。將以下編號文字翻譯成繁體中文，保留 Warzone、loadout、operator、gulag、Verdansk 等專有名詞不翻譯。只回傳翻譯，格式每行 [編號] 翻譯內容：\n\n${numbered}`;
+  try {
+    const texts = toTranslate.map(t => t.text);
+    const res = await fetch('http://localhost:3131/api/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'translate failed');
+    const { results } = data;
+    toTranslate.forEach((t, i) => {
+      const r = results[i+1];
+      if (!r) return;
+      if (t.field === 'title') items[t.idx].titleZH = r;
+      else items[t.idx].summaryZH = r;
+    });
+  } catch(e) { console.error('[translate] error:', e); alert('翻譯失敗：' + e.message); }
+}
+
+async function toggleTranslate() {
+  const btn = document.getElementById('translateBtn');
+  if (translated) {
+    translated = false;
+    btn.textContent = '譯 中文';
+    btn.disabled = false;
+    render();
+    return;
+  }
+  translated = true;
+  btn.textContent = '⏳ 翻譯中...';
+  btn.disabled = true;
+  const filterOn = document.getElementById('filterToggle').checked;
+  const pool = filterOn ? allItems : allRawItems;
+  const items = (activeSource === 'all' ? pool : pool.filter(i => i.source === activeSource)).slice(0, 30);
+  await batchTranslate(items);
+  btn.textContent = '🌐 顯示英文';
+  btn.disabled = false;
+  render();
+}
+
+function renderCard(item) {
+  const ts = item.tag ? `background:${item.tag.bg};color:${item.tag.color};` : 'background:#1e1e24;color:#888899;';
+  const imgHtml = item.img
+    ? `<img class="card-img" src="${item.img}" alt="" loading="lazy" onerror="this.outerHTML='<div class=card-img-ph>▣</div>'">`
+    : `<div class="card-img-ph">▣</div>`;
+  const title = (translated && item.titleZH) ? item.titleZH : item.title;
+  const summary = (translated && item.summaryZH) ? item.summaryZH : item.summary;
+  return `<a class="card" href="${item.link}" target="_blank" rel="noopener">
+    <div class="card-inner">
+      <div class="card-body">
+        <div class="card-top"><span class="src-tag" style="${ts}">${item.sourceLabel}</span><span class="card-time">${timeAgo(item.date)}</span></div>
+        <p class="card-title">${title}</p>
+        <p class="card-summary">${summary}</p>
+      </div>${imgHtml}
+    </div>
+  </a>`;
+}
+
+loadAll();
+</script>
+</body>
+</html>
