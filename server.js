@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const os = require('os');
 const RSSParser = require('rss-parser');
 const cors = require('cors');
 
@@ -126,10 +128,22 @@ app.post('/api/translate', express.json(), async (req, res) => {
   }
 });
 
+app.use(express.static(path.join(__dirname)));
+
 app.get('/health', (_, res) => res.json({ ok: true }));
 
 const PORT = 3131;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
+  const nets = os.networkInterfaces();
+  let localIP = 'localhost';
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        localIP = net.address;
+      }
+    }
+  }
   console.log(`\nCOD Intel server 啟動成功！`);
-  console.log(`http://localhost:${PORT}/api/news\n`);
+  console.log(`電腦瀏覽器：http://localhost:${PORT}/cod-news.html`);
+  console.log(`手機（同WiFi）：http://${localIP}:${PORT}/cod-news.html\n`);
 });
