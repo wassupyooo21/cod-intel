@@ -85,7 +85,11 @@
 const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.startsWith('192.168.');
 const BASE = IS_LOCAL ? `http://${location.hostname}:3131` : 'https://cod-intel.onrender.com';
 const API = `${BASE}/api/news`;
-const COD_REGEX = /call of duty|warzone|cod\b|modern warfare|black ops|mw4|mw3|bo7|dmz|warzone mobile|activision|infinity ward|treyarch|sledgehammer|blackout|cold war|vanguard|ghost|makarov|operator|gulag|verdansk|rebirth|urzikstan|omnimovement/i;
+// COD 判斷改由後端處理（item.isCod），前後端不會再各自一套規則
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 let allItems = [], allRawItems = [], activeSource = 'all', sourceList = [];
 
@@ -117,20 +121,20 @@ async function loadAll() {
   }
 
   // 動態建立 source bar
-  sourceList = [{ id: 'all', label: 'All' }, ...results.map(r => ({ id: r.id, label: r.label }))];
+  const active = results.filter(r => !r.disabled);
+  sourceList = [{ id: 'all', label: 'All' }, ...active.map(r => ({ id: r.id, label: r.label }))];
   buildSourceBar();
 
-  const debugLines = results.map(r =>
+  const debugLines = active.map(r =>
     r.error
-      ? `<span class="debug-err">✗ ${r.label}：${r.error}</span>`
-      : `<span class="debug-ok">✓ ${r.label}</span> ${r.matched ?? r.total} 篇`
+      ? `<span class="debug-err">✗ ${esc(r.label)}：${esc(r.error)}</span>`
+      : `<span class="debug-ok">✓ ${esc(r.label)}</span> COD ${r.matched} / 共 ${r.total} 篇`
   ).join('　　');
   document.getElementById('debugBar').innerHTML = debugLines;
   document.getElementById('debugBar').className = 'debug-bar show';
 
-  results.forEach(r => {
-    const cod = r.items.filter(i => COD_REGEX.test(i.title + ' ' + i.summary));
-    allItems.push(...cod);
+  active.forEach(r => {
+    allItems.push(...r.items.filter(i => i.isCod));
     allRawItems.push(...r.items);
   });
 
@@ -175,8 +179,6 @@ document.getElementById('filterToggle').addEventListener('change', render);
 let translated = false;
 let translateCache = {};
 
-
-
 async function batchTranslate(items) {
   const toTranslate = [];
   items.forEach((item, i) => {
@@ -186,8 +188,6 @@ async function batchTranslate(items) {
     }
   });
   if (!toTranslate.length) return;
-  const numbered = toTranslate.map((t, i) => `[${i+1}] ${t.text}`).join('\n');
-  const prompt = `你是 Call of Duty 電玩新聞翻譯專家。將以下編號文字翻譯成繁體中文，保留 Warzone、loadout、operator、gulag、Verdansk 等專有名詞不翻譯。只回傳翻譯，格式每行 [編號] 翻譯內容：\n\n${numbered}`;
   try {
     const texts = toTranslate.map(t => t.text);
     const res = await fetch(`${BASE}/api/translate`, {
@@ -231,16 +231,16 @@ async function toggleTranslate() {
 function renderCard(item) {
   const ts = item.tag ? `background:${item.tag.bg};color:${item.tag.color};` : 'background:#1e1e24;color:#888899;';
   const imgHtml = item.img
-    ? `<img class="card-img" src="${item.img}" alt="" loading="lazy" onerror="this.outerHTML='<div class=card-img-ph>▣</div>'">`
+    ? `<img class="card-img" src="${esc(item.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=card-img-ph>▣</div>'">`
     : `<div class="card-img-ph">▣</div>`;
   const title = (translated && item.titleZH) ? item.titleZH : item.title;
   const summary = (translated && item.summaryZH) ? item.summaryZH : item.summary;
-  return `<a class="card" href="${item.link}" target="_blank" rel="noopener">
+  return `<a class="card" href="${esc(item.link)}" target="_blank" rel="noopener">
     <div class="card-inner">
       <div class="card-body">
-        <div class="card-top"><span class="src-tag" style="${ts}">${item.sourceLabel}</span><span class="card-time">${timeAgo(item.date)}</span></div>
-        <p class="card-title">${title}</p>
-        <p class="card-summary">${summary}</p>
+        <div class="card-top"><span class="src-tag" style="${ts}">${esc(item.sourceLabel)}</span><span class="card-time">${timeAgo(item.date)}</span></div>
+        <p class="card-title">${esc(title)}</p>
+        <p class="card-summary">${esc(summary)}</p>
       </div>${imgHtml}
     </div>
   </a>`;
