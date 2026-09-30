@@ -1,156 +1,169 @@
-const express = require('express');
-const path = require('path');
-const os = require('os');
-const RSSParser = require('rss-parser');
-const cors = require('cors');
+<script>
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname.startsWith('192.168.');
+const BASE = IS_LOCAL ? `http://${location.hostname}:3131` : 'https://cod-intel.onrender.com';
+const API = `${BASE}/api/news`;
+// COD 判斷改由後端處理（item.isCod），前後端不會再各自一套規則
 
-const app = express();
-app.use(cors());
-
-// 不同 user-agent 給不同來源
-function makeParser(ua) {
-  return new RSSParser({
-    timeout: 15000,
-    headers: { 'User-Agent': ua, 'Accept': 'application/rss+xml, application/xml, text/xml, */*' }
-  });
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-const DEFAULT_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-const CURL_UA = 'curl/7.88.1';
+let allItems = [], allRawItems = [], activeSource = 'all', sourceList = [];
 
-const SOURCES = [
-  {
-    id: 'dexerto', label: 'Dexerto',
-    tag: { bg: '#1e1a2e', color: '#a78bfa' },
-    url: 'https://www.dexerto.com/call-of-duty/feed/',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'vgc', label: 'VGC',
-    tag: { bg: '#0e2218', color: '#4acd8d' },
-    url: 'https://www.videogameschronicle.com/category/news/feed/',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'dot', label: 'Dot Esports',
-    tag: { bg: '#2a1010', color: '#f87171' },
-    url: 'https://dotesports.com/feed',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'mp1st', label: 'MP1st',
-    tag: { bg: '#221a08', color: '#fbbf24' },
-    url: 'https://mp1st.com/tag/call-of-duty/feed',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'ign', label: 'IGN',
-    tag: { bg: '#1a0e0e', color: '#f0a050' },
-    url: 'https://feeds.ign.com/ign/all',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'kotaku', label: 'Kotaku',
-    tag: { bg: '#0e1a1a', color: '#2dd4bf' },
-    url: 'https://kotaku.com/tag/call-of-duty/rss',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'detonated', label: 'Detonated',
-    tag: { bg: '#1a0a0a', color: '#ff6b35' },
-    url: 'https://detonated.com/feed/',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-  {
-    id: 'pcgamer', label: 'PC Gamer',
-    tag: { bg: '#1a0a1a', color: '#c084fc' },
-    url: 'https://www.pcgamer.com/rss/',
-    ua: DEFAULT_UA,
-    codOnly: false,
-  },
-];
-
-function extractImg(item) {
-  return (
-    item.enclosure?.url ||
-    item['media:thumbnail']?.['$']?.url ||
-    item['media:content']?.['$']?.url ||
-    item['itunes:image']?.['$']?.href ||
-    ''
-  );
+function timeAgo(d) {
+  const s = Math.floor((Date.now() - new Date(d)) / 1000);
+  if (isNaN(s) || s < 0) return '';
+  if (s < 60) return '剛剛';
+  if (s < 3600) return Math.floor(s / 60) + ' 分鐘前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小時前';
+  return Math.floor(s / 86400) + ' 天前';
 }
 
-async function fetchSource(src) {
-  const parser = makeParser(src.ua || DEFAULT_UA);
+async function loadAll() {
+  allItems = []; allRawItems = [];
+  document.getElementById('status').innerHTML = '<span class="spinner"></span>載入中...';
+  document.getElementById('feed').innerHTML = '';
+  document.getElementById('debugBar').className = 'debug-bar';
+  document.getElementById('serverWarn').style.display = 'none';
+
+  let results;
   try {
-    const feed = await parser.parseURL(src.url);
-    const COD_RE = /call of duty|warzone|cod\b|modern warfare|black ops|mw[0-9]|bo[0-9]|dmz|activision|infinity ward|treyarch|sledgehammer|blackout|cold war|vanguard|ghost|makarov|operator|gulag|verdansk|rebirth|urzikstan|omnimovement/i;
-    const allItems = (feed.items || []).slice(0, 30).map(item => ({
-      source: src.id,
-      sourceLabel: src.label,
-      tag: src.tag,
-      title: item.title || '',
-      summary: (item.contentSnippet || item.summary || '').replace(/\s+/g, ' ').trim().slice(0, 200),
-      img: extractImg(item),
-      link: item.link || '',
-      date: item.pubDate || item.isoDate || '',
-    }));
-    // COD 專屬 feed 全部顯示；綜合 feed 才過濾
-    const items = src.codOnly ? allItems : allItems.filter(i => COD_RE.test(i.title + ' ' + i.summary));
-    return { id: src.id, label: src.label, total: allItems.length, matched: items.length, items, error: null };
+    const res = await fetch(API);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    results = await res.json();
   } catch (e) {
-    return { id: src.id, label: src.label, total: 0, items: [], error: e.message };
+    document.getElementById('serverWarn').style.display = 'block';
+    document.getElementById('status').textContent = '無法連線到 server';
+    return;
   }
+
+  // 動態建立 source bar
+  const active = results.filter(r => !r.disabled);
+  sourceList = [{ id: 'all', label: 'All' }, ...active.map(r => ({ id: r.id, label: r.label }))];
+  buildSourceBar();
+
+  const debugLines = active.map(r =>
+    r.error
+      ? `<span class="debug-err">✗ ${esc(r.label)}：${esc(r.error)}</span>`
+      : `<span class="debug-ok">✓ ${esc(r.label)}</span> COD ${r.matched} / 共 ${r.total} 篇`
+  ).join('　　');
+  document.getElementById('debugBar').innerHTML = debugLines;
+  document.getElementById('debugBar').className = 'debug-bar show';
+
+  active.forEach(r => {
+    allItems.push(...r.items.filter(i => i.isCod));
+    allRawItems.push(...r.items);
+  });
+
+  allItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+  allRawItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const now = new Date();
+  document.getElementById('lastUpdate').innerHTML =
+    `<span class="live-dot"></span>更新於 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  render();
 }
 
-app.get('/api/news', async (req, res) => {
-  const results = await Promise.all(SOURCES.map(fetchSource));
-  res.json(results);
-});
+function render() {
+  const filterOn = document.getElementById('filterToggle').checked;
+  const pool = filterOn ? allItems : allRawItems;
+  const items = activeSource === 'all' ? pool : pool.filter(i => i.source === activeSource);
+  document.getElementById('status').textContent = items.length + ' 則消息';
 
-app.post('/api/translate', express.json(), async (req, res) => {
-  const { texts } = req.body;
-  if (!texts || !texts.length) return res.status(400).json({ error: 'missing texts' });
-  try {
-    const results = {};
-    // MyMemory 免費 API，每次一篇，並行處理
-    const promises = texts.map(async (text, i) => {
-      if (!text || !text.trim()) { results[i+1] = ''; return; }
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text.slice(0, 500))}&langpair=en|zh-TW`;
-      const r = await fetch(url);
-      const data = await r.json();
-      results[i+1] = data.responseData?.translatedText || text;
-    });
-    await Promise.all(promises);
-    res.json({ results });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
+  if (!items.length) {
+    document.getElementById('feed').innerHTML = `<div class="empty"><div style="font-size:36px;margin-bottom:12px">📭</div><div>沒有找到文章</div><div style="margin-top:6px;font-size:12px">試試關閉「只看 COD」篩選</div></div>`;
+    return;
   }
-});
 
-app.use(express.static(path.join(__dirname)));
+  document.getElementById('feed').innerHTML = items.map(renderCard).join('');
+}
 
-app.get('/health', (_, res) => res.json({ ok: true }));
+function buildSourceBar() {
+  document.getElementById('sourceBar').innerHTML = sourceList.map(s =>
+    `<button class="src-btn${s.id === 'all' ? ' active' : ''}" data-id="${s.id}" onclick="setSource('${s.id}')">${s.label}</button>`
+  ).join('');
+}
 
-const PORT = 3131;
-app.listen(PORT, '0.0.0.0', () => {
-  const nets = os.networkInterfaces();
-  let localIP = 'localhost';
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name]) {
-      if (net.family === 'IPv4' && !net.internal) {
-        localIP = net.address;
-      }
+function setSource(id) {
+  activeSource = id;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.toggle('active', b.dataset.id === id));
+  render();
+}
+
+document.getElementById('filterToggle').addEventListener('change', render);
+
+let translated = false;
+let translateCache = {};
+
+async function batchTranslate(items) {
+  const toTranslate = [];
+  items.forEach((item, i) => {
+    if (!item.titleZH) {
+      toTranslate.push({ idx: i, field: 'title', text: item.title });
+      toTranslate.push({ idx: i, field: 'summary', text: item.summary });
     }
+  });
+  if (!toTranslate.length) return;
+  try {
+    const texts = toTranslate.map(t => t.text);
+    const res = await fetch(`${BASE}/api/translate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'translate failed');
+    const { results } = data;
+    toTranslate.forEach((t, i) => {
+      const r = results[i+1];
+      if (!r) return;
+      if (t.field === 'title') items[t.idx].titleZH = r;
+      else items[t.idx].summaryZH = r;
+    });
+  } catch(e) { console.error('[translate] error:', e); alert('翻譯失敗：' + e.message); }
+}
+
+async function toggleTranslate() {
+  const btn = document.getElementById('translateBtn');
+  if (translated) {
+    translated = false;
+    btn.textContent = '譯 中文';
+    btn.disabled = false;
+    render();
+    return;
   }
-  console.log(`\nCOD Intel server 啟動成功！`);
-  console.log(`電腦瀏覽器：http://localhost:${PORT}/cod-news.html`);
-  console.log(`手機（同WiFi）：http://${localIP}:${PORT}/cod-news.html\n`);
-});
+  translated = true;
+  btn.textContent = '⏳ 翻譯中...';
+  btn.disabled = true;
+  const filterOn = document.getElementById('filterToggle').checked;
+  const pool = filterOn ? allItems : allRawItems;
+  const items = (activeSource === 'all' ? pool : pool.filter(i => i.source === activeSource)).slice(0, 30);
+  await batchTranslate(items);
+  btn.textContent = '🌐 顯示英文';
+  btn.disabled = false;
+  render();
+}
+
+function renderCard(item) {
+  const ts = item.tag ? `background:${item.tag.bg};color:${item.tag.color};` : 'background:#1e1e24;color:#888899;';
+  const imgHtml = item.img
+    ? `<img class="card-img" src="${esc(item.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=card-img-ph>▣</div>'">`
+    : `<div class="card-img-ph">▣</div>`;
+  const title = (translated && item.titleZH) ? item.titleZH : item.title;
+  const summary = (translated && item.summaryZH) ? item.summaryZH : item.summary;
+  return `<a class="card" href="${esc(item.link)}" target="_blank" rel="noopener">
+    <div class="card-inner">
+      <div class="card-body">
+        <div class="card-top"><span class="src-tag" style="${ts}">${esc(item.sourceLabel)}</span><span class="card-time">${timeAgo(item.date)}</span></div>
+        <p class="card-title">${esc(title)}</p>
+        <p class="card-summary">${esc(summary)}</p>
+      </div>${imgHtml}
+    </div>
+  </a>`;
+}
+
+loadAll();
+</script>
+</body>
+</html>
